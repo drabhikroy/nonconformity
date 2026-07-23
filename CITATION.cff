@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "Nonconformity: find where operational data breaks its own pattern"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Roy
+    given-names: Abhik
+repository-code: "https://github.com/drabhikroy/nonconformity"
+orcid: 0000-0002-7085-8964
+abstract: >-
+  An open source R Shiny application for reviewing operational time series.
+  Classical, transparent methods learn the ordinary rhythm of a series and
+  point at the moments that break it, with plain language readings for
+  operators and exposed method internals for researchers. An optional
+  language model running on the same machine adds interpretation without
+  changing any number.
+keywords:
+  - anomaly detection
+  - time series
+  - R
+  - Shiny
+  - program evaluation
+license: PolyForm-Noncommercial-1.0.0
+version: 0.2.0
+date-released: "2026-07-23"

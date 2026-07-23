@@ -1,0 +1,428 @@
+/* Nonconformity stylesheet.
+   Every color that carries meaning lives in a custom property so the theme
+   and palette classes on body can swap the whole set at once. The contrast
+   audit in tests/test_contrast.R parses the blocks below, so any token
+   change is checked against WCAG 2.2 at 4.5 to 1 before delivery.
+
+   The palette blocks are deliberately complete. An earlier version left
+   the accent and two event colors untouched between palettes, so a switch
+   changed nothing a viewer was likely to be looking at and read as a dead
+   control. Each palette below now moves the accent, the focus ring, the
+   band, and all four event colors, so switching is unmistakable while each
+   palette stays separable for its kind of color vision. */
+
+/* Light theme, standard palette. Event colors are darkened variants of the
+   Okabe and Ito set so they hold 4.5 to 1 as text on white cards. */
+body {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --surface2: #f2f5f8;
+  --text: #17202a;
+  --muted: #4d5a66;
+  --border: #cdd6de;
+  --accent: #075985;
+  --accent-ink: #ffffff;
+  --spike: #8a5800;
+  --dip: #075985;
+  --run: #086148;
+  --shift: #8f3d6d;
+  --band: rgba(7, 89, 133, 0.10);
+  --focus: #075985;
+  --danger: #a01c1c;
+}
+
+/* Dark theme, standard palette. Dark is the default appearance and the
+   original Okabe and Ito hues read well on the deep surfaces. */
+body.dark {
+  --bg: #0f1317;
+  --surface: #191f26;
+  --surface2: #212933;
+  --text: #e9edf2;
+  --muted: #a3b0bd;
+  --border: #37424e;
+  --accent: #6ec1f2;
+  --accent-ink: #0f1317;
+  --spike: #e6a117;
+  --dip: #62b9ec;
+  --run: #2fb28a;
+  --shift: #d78fb5;
+  --band: rgba(98, 185, 236, 0.12);
+  --focus: #6ec1f2;
+  --danger: #f08c8c;
+}
+
+/* Deuteranopia and protanopia palette. Red against green is the unreliable
+   axis for about one man in twelve, so meaning rides on the blue to orange
+   axis with a purple between. The accent turns orange, which is the single
+   clearest signal that the switch took effect. */
+body.cb-deutan {
+  --accent: #9a5a00;
+  --spike: #6a4c00;
+  --dip: #14477a;
+  --run: #5a4b93;
+  --shift: #8a2f6b;
+  --band: rgba(154, 90, 0, 0.10);
+  --focus: #9a5a00;
+}
+body.dark.cb-deutan {
+  --accent: #f2a94e;
+  --spike: #f0c04a;
+  --dip: #6ea8f0;
+  --run: #b0a6f2;
+  --shift: #e88fc6;
+  --band: rgba(242, 169, 78, 0.12);
+  --focus: #f2a94e;
+}
+
+/* Tritanopia palette. Blue against yellow is the unreliable axis here, so
+   meaning rides on the red to teal axis. The accent turns teal so the
+   switch is obvious, and the four event colors stay far apart in hue. */
+body.cb-tritan {
+  --accent: #0b5d66;
+  --spike: #9c2f4e;
+  --dip: #0b5d66;
+  --run: #3a5f14;
+  --shift: #7a3d8f;
+  --band: rgba(11, 93, 102, 0.10);
+  --focus: #0b5d66;
+}
+body.dark.cb-tritan {
+  --accent: #4fc3cf;
+  --spike: #f0809c;
+  --dip: #4fc3cf;
+  --run: #9bc35a;
+  --shift: #cf9be0;
+  --band: rgba(79, 195, 207, 0.12);
+  --focus: #4fc3cf;
+}
+
+/* Monochrome palette. Color carries nothing at all; the marker shapes and
+   labels do the whole job, which also suits gray printing. The accent and
+   every event color collapse to one neutral, so switching to this palette
+   visibly drains the color out of the whole app at once. */
+body.cb-mono {
+  --accent: #3a444e;
+  --spike: #3a444e;
+  --dip: #3a444e;
+  --run: #3a444e;
+  --shift: #3a444e;
+  --band: rgba(58, 68, 78, 0.10);
+  --focus: #3a444e;
+}
+body.dark.cb-mono {
+  --accent: #c3ccd5;
+  --accent-ink: #0f1317;
+  --spike: #c3ccd5;
+  --dip: #c3ccd5;
+  --run: #c3ccd5;
+  --shift: #c3ccd5;
+  --band: rgba(195, 204, 213, 0.12);
+  --focus: #c3ccd5;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+
+/* Header: identity on the left, controls on the right. Buttons meet the
+   44px target rule from the Apple interface guidelines. */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-name { font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
+.brand-tag { color: var(--muted); font-size: 13.5px; }
+.header-controls { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn-ghost, .btn-solid, .seg-btn, .sample-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14.5px;
+  cursor: pointer;
+}
+.btn-ghost:hover, .seg-btn:hover, .sample-btn:hover { background: var(--surface2); }
+.btn-solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* Palette control is a segmented button group rather than a native select,
+   because a flexed select clips its own text in some engines. */
+.seg-group { display: flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.seg-btn { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
+.seg-btn:last-child { border-right: 0; }
+.seg-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* Visible focus geometry everywhere, never removed, only styled. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  gap: 18px;
+  padding: 18px 22px;
+  align-items: start;
+}
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+.panel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.panel-card h2 { margin: 0 0 6px 0; font-size: 17px; }
+.panel-card h3 { margin: 14px 0 6px 0; font-size: 15px; }
+.panel-card .hint { color: var(--muted); font-size: 13.5px; margin: 2px 0 10px 0; }
+
+/* Upload zone doubles as the empty state so the first screen teaches the
+   expected file shape instead of showing a blank chart. */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+}
+.upload-zone.dragover { border-color: var(--accent); background: var(--band); }
+
+.sample-btn { display: block; width: 100%; text-align: left; margin-top: 8px; }
+.sample-title { font-weight: 600; display: block; }
+.sample-sub { color: var(--muted); font-size: 13px; display: block; }
+
+label, .control-label { font-weight: 600; font-size: 14px; }
+.form-group { margin-bottom: 12px; }
+
+input[type='range'] { width: 100%; accent-color: var(--accent); min-height: 44px; }
+select, input[type='text'], input[type='number'] {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14.5px;
+}
+
+/* Chart card. The svg scales with its box; markers keep a fixed pixel
+   size through a root font scale set by the renderer. */
+.chart-card { min-height: 420px; }
+.chart-wrap { position: relative; }
+#chart-host svg { display: block; width: 100%; height: auto; }
+.chart-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.chart-toolbar .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.chart-toolbar .toggle input { accent-color: var(--accent); width: 18px; height: 18px; }
+
+/* The live region for keyboard users sits offscreen but stays readable
+   to assistive tech. */
+.sr-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* Tooltip follows hover and keyboard focus alike. */
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25);
+  max-width: 260px;
+  display: none;
+  z-index: 30;
+}
+
+/* Reading cards. One card per event, ranked by weight, with stat chips. */
+.reading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.event-card.type-spike { border-left-color: var(--spike); }
+.event-card.type-dip { border-left-color: var(--dip); }
+.event-card.type-run { border-left-color: var(--run); }
+.event-card.type-shift { border-left-color: var(--shift); }
+.event-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.event-glyph { flex: 0 0 auto; }
+.event-title { font-weight: 700; font-size: 15px; }
+.event-when { color: var(--muted); font-size: 13px; }
+.event-text { font-size: 14px; margin: 8px 0; }
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat-chip {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.model-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: 10px;
+  font-size: 13.5px;
+}
+.model-note .model-tag { color: var(--muted); font-size: 12px; display: block; margin-bottom: 4px; }
+
+/* The model summary card sits above the reading cards when a model
+   produces a triage, and reuses the surface language of every other card. */
+.model-summary-card .event-text { font-size: 14.5px; }
+
+/* Chat panel. The log grows upward in height to a cap, then scrolls, so a
+   long exchange never pushes the input off the screen. */
+.chat-log {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.chat-turn { padding: 10px 12px; border-radius: 10px; font-size: 14px; max-width: 90%; }
+.chat-turn.you { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
+.chat-turn.model { align-self: flex-start; background: var(--surface2); border: 1px solid var(--border); }
+.chat-turn .who { font-size: 11.5px; opacity: 0.8; display: block; margin-bottom: 3px; }
+.chat-row { display: flex; gap: 10px; }
+.chat-row input {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14.5px;
+}
+
+/* Researcher panels. Persona is a display mode rather than runtime state,
+   so the stylesheet owns it: the body class decides, and no script has to
+   walk the DOM setting inline styles that later rules cannot override. */
+.researcher-only { display: none; }
+body.show-researcher .researcher-only { display: block; }
+
+/* Researcher tables. A key value block for the method summary and a scroll
+   frame so a long score table never widens the whole column. */
+.kv-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 6px; }
+.kv-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.kv-table td:first-child { color: var(--muted); width: 45%; }
+.table-scroll { overflow-x: auto; }
+.table-scroll table { font-size: 13px; }
+.repro-code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'SFMono-Regular', 'Consolas', monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.summary-line { font-size: 15px; margin: 4px 0 14px 0; }
+
+/* Walkthrough overlay. */
+.tour-veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 11, 14, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.tour-card {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: min(560px, 92vw);
+  padding: 22px 24px;
+}
+.tour-stage { display: flex; justify-content: center; margin: 8px 0 14px 0; }
+.tour-title { font-size: 18px; font-weight: 700; margin: 0 0 4px 0; }
+.tour-body { font-size: 14.5px; color: var(--text); }
+.tour-nav { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.tour-dots { margin-left: auto; display: flex; gap: 6px; }
+.tour-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+.tour-dot.on { background: var(--accent); }
+
+/* Modals reuse the card language so popups match the app surface. */
+.modal-content { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 14px; }
+.modal-header, .modal-footer { border-color: var(--border); background: var(--surface); }
+.modal-header .close { color: var(--text); opacity: 1; }
+.modal-content .btn, .modal-content .btn-default, .modal-content .btn-secondary {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+}
+.modal-content table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.modal-content th, .modal-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+
+/* Entrance motion is decorative, so the reduced motion preference turns
+   every transition and animation off in one rule. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media print {
+  .app-header .header-controls, .chart-toolbar, .tour-veil { display: none; }
+  body { background: #ffffff; color: #000000; }
+}

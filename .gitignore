@@ -1,0 +1,24 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Shiny and rsconnect
+rsconnect/
+shiny_bookmarks/
+
+# Node, used only by the DOM test harness
+node_modules/
+package-lock.json
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local scratch
+*.log
+/tmp/
