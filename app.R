@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 
+app_name <- "Causality"
 app_version <- "0.2.0"
 
 # ---------------------------------------------------------------------------
@@ -885,12 +886,15 @@ ui <- fluidPage(
     )
   ),
   tags$footer(style = "padding: 8px 22px 20px; color: var(--muted); font-size: 12.5px;",
-    HTML(sprintf(
-      paste0("Nonconformity %s. Open source, local analysis only. ",
-             "PolyForm Noncommercial 1.0.0. Built by Abhik Roy with ",
-             "<a href='https://www.r-project.org/' target='_blank' rel='noopener'>R</a> and ",
-             "<a href='https://shiny.posit.co/' target='_blank' rel='noopener'>Shiny</a>."),
-      app_version))
+    HTML(paste0(
+          app_name, " ", app_version, ". Built with ",
+          '<a href="https://www.r-project.org" target="_blank" ',
+          'rel="noopener">R</a> and ',
+          '<a href="https://shiny.posit.co" target="_blank" ',
+          'rel="noopener">Shiny</a>. Copyright Abhik Roy, released under the ',
+          '<a href="https://polyformproject.org/licenses/noncommercial/1.0.0" ',
+          'target="_blank" rel="noopener">PolyForm Noncommercial ',
+          "License 1.0.0</a>."))
   )
 )
 
