@@ -19,6 +19,10 @@ plain readings, and a few honest controls. A researcher sees the same data
 with the method internals exposed: the raw scores, the choice of detector, and
 the exact call that reproduces a run. The view switch sits in the header.
 
+## Screenshot
+
+![The Nonconformity operator view, with the detection settings panel open and no data loaded yet](docs/screenshot-operator.png)
+
 ## Detection methods
 
 Several methods share one event schema, so the chart, the reading cards, and
