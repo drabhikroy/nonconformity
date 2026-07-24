@@ -17,7 +17,7 @@ numbers alone. Nothing leaves your computer.
 The app serves two audiences from one screen. An operator sees plain charts,
 plain readings, and a few honest controls. A researcher sees the same data
 with the method internals exposed: the raw scores, the choice of detector, and
-the exact call that reproduces a run. The view switch sits in the header.
+the exact call that reproduces a run.
 
 ## Screenshot
 
