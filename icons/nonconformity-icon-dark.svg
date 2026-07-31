@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Nonconformity">
+  <!-- App tile treatment, matching the dark surface and accent colors the
+       app itself boots into. The mark is the header path translated seven
+       units in each direction to center it with even padding on this
+       larger canvas, not redrawn, so the geometry stays identical. -->
+  <rect width="48" height="48" rx="7" fill="#191f26"/>
+  <path d="M9 29 L15 29 L18 17 L22 35 L26 13 L29 29 L39 29"
+        fill="none" stroke="#6ec1f2" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
