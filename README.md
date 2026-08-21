@@ -1,118 +1,218 @@
 # Nonconformity
 
-<!-- Badges follow the usual R project convention: language, license, status. -->
-[![R](https://img.shields.io/badge/built%20with-R-276DC3?logo=r&logoColor=white)](https://www.r-project.org/)
-[![Shiny](https://img.shields.io/badge/Shiny-app-447099)](https://shiny.posit.co/)
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-lightgrey)](LICENSE.md)
+## Find where operational data breaks its own pattern.
 
-Find where operational data breaks its own pattern.
+Nonconformity is an open source R Shiny app for reviewing operational
+time series such as server load, transaction counts, or sensor readings.
 
-Nonconformity is an open source R Shiny app for reviewing operational time
-series such as server load, transaction counts, or sensor readings. It learns
-the ordinary rhythm of a series with classical, transparent statistics and
-points at the moments that break it: spikes, dips, sustained runs, and lasting
-level shifts. Every flag comes with a plain language reading built from the
-numbers alone. Nothing leaves your computer.
+It learns the usual pattern of a time series and identifies moments that
+differ from that pattern, including spikes, dips, sustained runs, and
+lasting level changes. Each flagged event includes an explanation based
+on the observed data.
 
-The app serves two audiences from one screen. An operator sees plain charts,
-plain readings, and a few honest controls. A researcher sees the same data
-with the method internals exposed: the raw scores, the choice of detector, and
-the exact call that reproduces a run.
+Nothing leaves your computer. All calculations are performed locally.
 
-## Screenshot
+The app supports two audiences from one screen:
 
-![The Nonconformity operator view, with the detection settings panel open and no data loaded yet](docs/screenshot-operator.png)
+-   Operators see clear charts, explanations, and a small set of
+    controls.
+-   Researchers can inspect detection methods, scores, settings, and the
+    exact analysis call used for reproduction.
+
+![The Nonconformity operator view, with the detection settings panel
+open and no data loaded yet](docs/screenshot-operator.png)
+
+## How it works
+
+A typical workflow:
+
+1.  Load a CSV file or open a built-in example.
+2.  Choose a detection method.
+3.  Review flagged events on the chart.
+4.  Read the explanation for each event.
+5.  Export or reproduce the analysis when needed.
+
+The app keeps the detection method, event details, and explanations
+connected so users can understand why a point was flagged.
+
+## Example uses
+
+Nonconformity can support reviews of:
+
+-   Server and system performance
+-   Transaction activity
+-   Sensor measurements
+-   Other operational time series with regular measurements
 
 ## Detection methods
 
-Several methods share one event schema, so the chart, the reading cards, and
-the optional local model stay method agnostic. The method selector switches
-between them.
+Several methods use a shared event format, allowing the chart,
+explanation cards, and optional local model features to work
+consistently across methods.
 
-- **Resistant seasonal** (default). A running median trend, stacked seasonal
-  medians, and binary segmentation for level shifts. Medians resist the very
-  outliers the app hunts, and per segment offsets fold into the expected line
-  so a step never sprays false spikes after it.
-- **Rolling z-score.** A trailing median center and a trailing median absolute
-  deviation spread, with no seasonal assumption. Fast to react, and a useful
-  contrast that shows why a seasonal aware method is the right default for
-  rhythmic data.
-- **STL remainder.** Seasonal and trend decomposition by loess from base R,
-  tagging the remainder where it leaves an interquartile fence. It needs a
-  defined cycle and falls back to the resistant method when none applies.
+### Resistant seasonal (default)
 
-## The optional local model
+Uses a running median trend, seasonal medians, and binary segmentation
+for lasting level changes. Median-based calculations reduce the effect
+of the same extreme values the app is designed to detect.
 
-A language model running on your own machine can work on top of the analysis.
-It reads the analysis summary and the event list, never your raw readings, and
-never changes a number. It can summarize the whole run and say what matters
-first, add a cause note to each event card, answer typed questions about the
-loaded data in a chat panel, and draft an incident writeup you can copy into a
-ticket. The Local model guide inside the app covers installing Ollama, pulling
-a model, and the tradeoffs among four options.
+### Rolling z-score
+
+Uses a trailing median center and median absolute deviation spread
+without assuming a seasonal pattern. It provides a useful comparison for
+rhythmic and non-rhythmic data.
+
+### STL remainder
+
+Uses seasonal and trend decomposition with loess from base R and
+identifies unusual remainder values. It requires a defined cycle and
+falls back to the resistant seasonal method when one is not available.
+
+## Understanding flagged events
+
+Each event includes:
+
+-   The observed change
+-   The detection method used
+-   The underlying score
+-   A plain-language explanation
+
+The app exposes the analysis details so users can understand how events
+were identified rather than receiving only a final flag.
 
 ## Getting started
 
-```
+Run the app with:
+
+``` bash
 R -e "shiny::runApp('nonconformity')"
 ```
 
-Requires R with shiny, dplyr, tidyr, purrr, readr, tibble, and lubridate.
-Open the printed address in a browser, then open a sample from the left
-column or drop in a CSV.
+Requires R with:
 
-## Data shape
+-   `shiny`
+-   `dplyr`
+-   `tidyr`
+-   `purrr`
+-   `readr`
+-   `tibble`
+-   `lubridate`
 
-A plain CSV with two columns. The timestamp column may be named stamp,
-timestamp, time, date, datetime, or ds and holds ISO dates or datetimes at any
-regular cadence. The value column may be named value, y, count, load, amount,
-or measure and holds plain numbers. Ten readings is the floor and a few full
-cycles work far better. A template is available under the upload box.
+Open the displayed address in a browser, then choose a sample or upload
+a CSV.
+
+## Data format
+
+Nonconformity uses a CSV with two columns:
+
+-   A timestamp column containing dates or datetimes
+-   A numeric value column containing the measurement
+
+Timestamp columns may use names such as:
+
+-   `stamp`
+-   `timestamp`
+-   `time`
+-   `date`
+-   `datetime`
+-   `ds`
+
+Value columns may use names such as:
+
+-   `value`
+-   `y`
+-   `count`
+-   `load`
+-   `amount`
+-   `measure`
+
+Data should have at least 10 readings. Longer series covering several
+cycles generally produce better results.
+
+A template is available under the upload box.
+
+## Optional local model support
+
+A local model running through Ollama can work with completed analysis
+results.
+
+The model receives the analysis summary and event list, not the raw
+readings. It cannot change calculated values.
+
+The local model can:
+
+-   Summarize a complete analysis
+-   Add context to event cards
+-   Answer questions about the loaded data
+-   Draft an incident summary
+
+The Local model guide inside the app explains setup, model choices, and
+configuration.
 
 ## Accessibility
 
-Dark and light themes, four color vision palettes including monochrome, and
-contrast checked at WCAG 2.2 level 4.5 to 1 across all eight theme and palette
-combinations by an automated audit. Each palette moves the accent, the focus
-ring, and all four event colors, so switching is unmistakable. Event types
-carry their meaning by marker shape as well as color. Every marker is keyboard
-reachable with arrow key movement between events and spoken announcements
-through a live region. Touch targets meet the 44 pixel floor and motion honors
-the reduced motion preference.
+Nonconformity is designed so detected events remain readable across
+different visual settings.
+
+Features include:
+
+-   Dark and light themes
+-   Color settings for different vision differences, including
+    monochrome
+-   WCAG 2.2 contrast checks across themes and palettes
+-   Event types represented through marker shape as well as color
+-   Keyboard navigation between events
+-   Spoken announcements through a live region
+-   Touch targets meeting accessibility size requirements
+-   Reduced motion support
 
 ## Tests
 
-```
+Run the full test suite:
+
+``` bash
 sh nonconformity/tests/run_all.sh
 ```
 
-The gate runs the engine suite against planted events in the samples and
-across every method, the contrast audit, the writing sweeps, DOM level
-rendering checks under jsdom, and a live boot of the app.
+The test suite checks:
+
+-   Detection methods against known sample events
+-   Contrast and accessibility settings
+-   Generated writing
+-   Browser rendering with jsdom
+-   Application startup
 
 ## Colophon
 
 Nonconformity is written in [R](https://www.r-project.org/) and built on
-[Shiny](https://shiny.posit.co/). The detection engine uses base R only:
-`stats::runmed` for the trend, `stats::stl` for the loess decomposition, and
-a hand written binary segmentation for level shifts. Data handling uses the
-tidyverse packages listed above. The chart is hand built SVG with no plotting
-library, so every mark is inspectable and the accessibility layer is part of
-the drawing rather than a wrapper around it.
+[Shiny](https://shiny.posit.co/).
 
-Tested against R 4.3 on Linux. Please report the output of `sessionInfo()`
-with any bug report.
+The detection engine uses base R methods including:
+
+-   `stats::runmed` for trend estimation
+-   `stats::stl` for decomposition
+-   A custom binary segmentation approach for lasting level changes
+
+Data handling uses the listed tidyverse packages. The chart is
+hand-built SVG, allowing each visual element and accessibility feature
+to be controlled directly.
+
+Tested against R 4.3 on Linux. Please include the output of
+`sessionInfo()` with bug reports.
 
 ## Citation
 
-If this software supports published work, please cite it. `CITATION.cff` in
-the repository root carries machine readable metadata, and GitHub renders a
-"Cite this repository" control from it.
+If this software supports published work, please cite it.
+
+The `CITATION.cff` file contains citation information, and GitHub
+provides a formatted citation from the repository sidebar.
 
 ## License
 
-PolyForm Noncommercial License 1.0.0. See LICENSE.md.
+PolyForm Noncommercial License 1.0.0.
 
-Noncommercial use is permitted, which under these terms explicitly includes
-use by charitable organizations, educational institutions, public research
-organizations, and government institutions, regardless of funding source.
+See [LICENSE.md](LICENSE.md).
+
+Noncommercial use is permitted under the license terms, including use by
+charitable organizations, educational institutions, public research
+organizations, and government institutions.
