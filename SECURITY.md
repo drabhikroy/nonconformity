@@ -29,7 +29,8 @@ deterministic analysis never depends on the model answering at all.
 
 Open a private security advisory through the repository, or open a
 normal issue if the problem is not sensitive. Please include the
-version, what you did, and what you saw.
+version, what you did, and what you saw, and, if the local model
+feature is involved, the endpoint address you had configured.
 
 ## Scope
 
