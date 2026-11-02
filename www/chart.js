@@ -140,9 +140,15 @@
     } catch (err) {
       var host = document.getElementById('chart-host');
       if (host) {
-        host.innerHTML = '<p class="hint">The chart could not be rendered: ' +
+        /* Built as text rather than markup, since an error message can
+           quote whatever value tripped it. */
+        var msg = document.createElement('p');
+        msg.className = 'hint';
+        msg.textContent = 'The chart could not be rendered: ' +
           String(err && err.message ? err.message : err) +
-          '. The readings below are unaffected.</p>';
+          '. The readings below are unaffected.';
+        host.innerHTML = '';
+        host.appendChild(msg);
       }
       if (window.console) console.error('Nonconformity chart render failed', err);
     }

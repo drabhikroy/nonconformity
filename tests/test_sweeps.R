@@ -4,7 +4,9 @@
 # the stylesheet, and a comment density near fifteen percent.
 
 files <- c("app.R", "www/styles.css", "www/ui.js", "www/chart.js",
-           "www/walkthrough.js", "www/model.js", "README.md", "CONTRIBUTING.md")
+           "www/walkthrough.js", "www/model.js", "README.md", "CONTRIBUTING.md",
+           "SECURITY.md", "CODE_OF_CONDUCT.md", "tests/run_all.sh",
+           "tests/test_engine.R", "tests/test_server.R", "tests/test_dom.js")
 
 ok <- 0; bad <- 0
 check <- function(label, cond, detail = "") {

@@ -12,6 +12,10 @@
 (function () {
   var models = [];
   var payload = null;
+  /* Counts payloads. Every model action records the count it started on,
+     because a slider move or a new file rebuilds the cards with the same
+     ids, and a slow answer about the old run would land on the new one. */
+  var run = 0;
   var chatHistory = [];
 
   /* The address box is the single source of truth for the endpoint, and a
@@ -34,8 +38,11 @@
     return pick && pick.value ? pick.value : models[0];
   }
 
+  /* Quotes are escaped too because the model list lands inside an option
+     value attribute, where an unescaped quote ends the attribute early. */
   function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   /* The tags call doubles as the health check: it proves the server is up
@@ -73,18 +80,25 @@
     var m = payload.meta || {};
     var events = window.NcChart.toRows(payload.events);
     var lines = events.map(function (ev) {
-      var size = Math.abs(ev.peak_score).toFixed(1);
+      var size = wobbleOf(ev);
       var extra = ev.type === 'run' ? (', lasting ' + ev.len + ' readings') :
         (ev.type === 'shift' ? (', level ' + fmt(ev.before_level) + ' to ' + fmt(ev.after_level)) : '');
       return '- ' + ev.title + ' at ' + ev.when + ' (' + ev.direction +
-        ', about ' + size + ' scaled units' + extra + ')';
+        ', about ' + size + ' times the usual variation' + extra + ')';
     }).join('\n');
     return 'Series: ' + (m.source || 'uploaded data') + ', ' + m.cadence +
       ' cadence, ' + (m.n || '?') + ' readings.\n' +
-      'Method: ' + (m.method_label || m.method) + '. Sensitivity ' + m.sens +
-      ' scaled units.\n' +
+      'Method: ' + (m.method_label || m.method) + '. Events are readings more than ' +
+      m.sens + ' times the usual variation from the expected level.\n' +
       'Deterministic summary: ' + (m.summary || '') + '\n' +
       'Events found (' + events.length + '):\n' + (lines || '- none');
+  }
+
+  /* The server sends the multiple the event cards display. The raw score is
+     a fallback only, for a payload from an older server. */
+  function wobbleOf(ev) {
+    var w = (ev.wobble !== undefined && ev.wobble !== null) ? ev.wobble : ev.peak_score;
+    return Math.abs(Number(w)).toFixed(1);
   }
 
   function fmt(v) {
@@ -147,7 +161,9 @@
       'operator: which one or two events deserve attention first and why, and ' +
       'whether the overall picture looks routine or worth a closer look. Plain ' +
       'language, no preamble, no markdown.\n\n' + analysisContext();
+    var started = run;
     generate(prompt, function (text, failed) {
+      if (started !== run) return;
       showOutput('Model summary of this run',
         'Model summary from ' + chosenModel(), text, failed);
       status(failed ? 'The model could not be reached.' : 'Summary ready.');
@@ -164,7 +180,12 @@
     status('Writing notes with ' + chosenModel() + '...');
     var done = 0;
     var failed = 0;
+    var started = run;
     function next(i) {
+      if (started !== run) {
+        status('The data changed, so the remaining notes were not written.');
+        return;
+      }
       if (i >= events.length) {
         status(failed > 0
           ? ('Added ' + done + ' of ' + events.length + ' notes. ' + failed +
@@ -175,12 +196,13 @@
       var ev = events[i];
       var prompt = 'You are annotating one anomaly in an operational time series (' +
         cadence + ' cadence). Event: ' + ev.title + ' at ' + ev.when +
-        ', size about ' + Math.abs(ev.peak_score).toFixed(1) +
-        ' scaled units, direction ' + ev.direction +
+        ', size about ' + wobbleOf(ev) +
+        ' times the usual variation, direction ' + ev.direction +
         '. In two sentences and under 45 words, name the two or three most ' +
         'common operational causes for this kind of event and one check a ' +
         'reviewer could run next. No preamble.';
       generate(prompt, function (text, callFailed) {
+        if (started !== run) return;
         if (callFailed) failed += 1;
         var note = document.getElementById('note-' + ev.id);
         if (note && text) {
@@ -206,7 +228,9 @@
       'observed, when it happened and how large it was, the most likely ' +
       'operational causes, and a recommended next step. Ground every claim in ' +
       'the information below and do not invent specifics.\n\n' + analysisContext();
+    var started = run;
     generate(prompt, function (text, failed) {
+      if (started !== run) return;
       showOutput('Draft incident writeup',
         'Draft incident writeup from ' + chosenModel(), text, failed);
       status(failed ? 'The model could not be reached.'
@@ -226,7 +250,9 @@
     if (!log) return null;
     var div = document.createElement('div');
     div.className = 'chat-turn ' + cls;
-    div.innerHTML = '<span class="who">' + who + '</span>' + escapeHtml(text);
+    /* The speaker label is usually the model name, which comes from the
+       endpoint like any other model output and gets the same escaping. */
+    div.innerHTML = '<span class="who">' + escapeHtml(who) + '</span>' + escapeHtml(text);
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
     return div;
@@ -249,13 +275,16 @@
       analysisContext() +
       (history ? ('\n\nEarlier in this chat:\n' + history) : '') +
       '\n\nQuestion: ' + q;
+    var started = run;
     generate(prompt, function (text, failed) {
       var ans = failed
         ? 'The model could not be reached. Check that Ollama is still running.'
         : (text || 'The model answered with nothing. Try rephrasing the question.');
+      var stale = (started !== run);
+      if (stale) ans += ' (This answer is about the data loaded when the question was asked.)';
       if (pending) pending.innerHTML = '<span class="who">' +
         escapeHtml(chosenModel()) + '</span>' + escapeHtml(ans);
-      chatHistory.push({ q: q, a: ans });
+      if (!stale) chatHistory.push({ q: q, a: ans });
       var log = document.getElementById('chat-log');
       if (log) log.scrollTop = log.scrollHeight;
     });
@@ -279,6 +308,13 @@
     annotate: annotate,
     incident: incident,
     ask: ask,
-    setPayload: function (p) { payload = p; }
+    setPayload: function (p) {
+      payload = p;
+      run += 1;
+      /* A summary or draft describes one run, so it comes down when the
+         data it described is replaced. */
+      var card = document.getElementById('triage-card');
+      if (card) card.style.display = 'none';
+    }
   };
 })();

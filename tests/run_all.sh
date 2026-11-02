@@ -1,23 +1,51 @@
 #!/bin/sh
-# Full gate for Nonconformity: engine, contrast, sweeps, DOM, and a live boot.
+# Full gate for Nonconformity: engine, server, contrast, sweeps, DOM, and a
+# live boot. Run from anywhere; the script moves to the repository root.
 set -e
 cd "$(dirname "$0")/.."
+
+# The DOM suite needs jsdom. A NODE_PATH set by the caller wins, then a
+# node_modules folder in the repository root, then the global npm folder.
+if [ -z "$NODE_PATH" ]; then
+  if [ -d node_modules/jsdom ]; then
+    NODE_PATH="$(pwd)/node_modules"
+  else
+    NODE_PATH="$(npm root -g 2>/dev/null || true)"
+  fi
+fi
+export NODE_PATH
+if ! node -e "require('jsdom')" >/dev/null 2>&1; then
+  echo "jsdom is not installed. From the repository root run:"
+  echo "  npm install --no-save jsdom"
+  exit 1
+fi
+
 echo "== engine =="
 Rscript tests/test_engine.R
+echo "== server =="
+Rscript tests/test_server.R
 echo "== contrast =="
 Rscript tests/test_contrast.R
 echo "== sweeps =="
 Rscript tests/test_sweeps.R
 echo "== dom =="
-NODE_PATH=/home/claude/node_modules node tests/test_dom.js
+node tests/test_dom.js
+
 echo "== live boot =="
-Rscript -e 'shiny::runApp(".", port = 8123, launch.browser = FALSE)' > /tmp/nc_boot.log 2>&1 &
+LOG="$(mktemp)"
+Rscript -e 'shiny::runApp(".", port = 8123, launch.browser = FALSE)' > "$LOG" 2>&1 &
 PID=$!
-sleep 6
-if curl -s http://127.0.0.1:8123 | grep -q "Nonconformity"; then
-  echo "pass  app boots and serves the page"
-else
-  echo "FAIL  app did not serve"; kill $PID 2>/dev/null; exit 1
-fi
-kill $PID 2>/dev/null
+# Poll rather than sleep a fixed time, so a slow machine is not reported
+# as a broken app and a fast one does not wait.
+tries=0
+until curl -s http://127.0.0.1:8123 | grep -q "Nonconformity"; do
+  tries=$((tries + 1))
+  if [ "$tries" -ge 30 ]; then
+    echo "FAIL  app did not serve within 30 seconds. Log follows:"
+    cat "$LOG"; kill "$PID" 2>/dev/null; rm -f "$LOG"; exit 1
+  fi
+  sleep 1
+done
+echo "pass  app boots and serves the page"
+kill "$PID" 2>/dev/null; rm -f "$LOG"
 echo "all suites passed"

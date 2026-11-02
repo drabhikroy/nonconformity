@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Roy
     given-names: Abhik
+    orcid: "https://orcid.org/0000-0002-7085-8964"
 repository-code: "https://github.com/drabhikroy/nonconformity"
-orcid: 0000-0002-7085-8964
 abstract: >-
   An open source R Shiny application for reviewing operational time series.
   Classical, transparent methods learn the ordinary rhythm of a series and
@@ -21,5 +21,5 @@ keywords:
   - Shiny
   - program evaluation
 license: PolyForm-Noncommercial-1.0.0
-version: 0.2.0
-date-released: "2026-07-23"
+version: 0.2.1
+date-released: "2026-11-02"

@@ -21,14 +21,20 @@ lubridate.
 
 ## Running the tests
 
+The DOM suite needs jsdom, installed once from the repository root:
+
 ```sh
+npm install --no-save jsdom
 sh tests/run_all.sh
 ```
 
-The gate must pass before a pull request is reviewed. It runs five suites:
+The gate must pass before a pull request is reviewed. It runs six suites:
 
 - **Engine.** Detection is checked against events planted at known positions
-  in the sample data, across every registered method.
+  in the sample data, and against pure noise, where every method should flag
+  at about the rate the sensitivity setting implies.
+- **Server.** The server function runs with simulated inputs, covering the
+  empty state, out of range settings, and every method and cycle option.
 - **Contrast.** Every color pair that carries meaning is checked against WCAG
   2.2 at 4.5 to 1, in all eight theme and palette combinations.
 - **Writing sweeps.** Banned lexemes, em and en dashes, contractions, and
@@ -39,15 +45,17 @@ The gate must pass before a pull request is reviewed. It runs five suites:
 
 ## Adding a detection method
 
-Methods are registered in one place. Add a row to `method_registry` in `app.R`
-and write a function matching the detector contract documented above the
-method definitions. A detector receives `(df, ex, sens, penalty)` and returns
+Methods are registered in one place. Add a row to `method_registry` in `app.R`,
+setting `uses_penalty` to `TRUE` only if the method reads the shift caution
+setting, and write a function matching the detector contract documented above
+the method definitions. A detector receives `(df, ex, sens, penalty)` and returns
 a list with `events`, `expected`, `lo`, `hi`, and `scale`.
 
 `lo` and `hi` are per reading rather than a single width. A method whose
 threshold moves from reading to reading would otherwise show marks sitting
 inside its own expected range, which reads as a contradiction. The engine
-suite checks this for every registered method, so a new one is covered
+suite checks this, along with the noise rate, for every registered method, so
+a new one is covered
 automatically.
 
 ## Style

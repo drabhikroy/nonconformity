@@ -24,6 +24,8 @@ const dom = new JSDOM('<!doctype html><html><body>' +
   '<button id="model-triage"></button><button id="model-notes"></button>' +
   '<button id="model-incident"></button></div>' +
   '<div id="triage-card" style="display:none;"><h2 id="triage-title"></h2><div id="triage-body"></div></div>' +
+  '<input id="ollama-url" value="http://localhost:11434"><div id="model-status"></div>' +
+  '<select id="model-pick"></select>' +
   '<div id="chat-card" style="display:none;"><div id="chat-log"></div>' +
   '<input id="chat-input"><button id="chat-send"></button></div>' +
   '</body></html>', { pretendToBeVisual: true });
@@ -143,13 +145,13 @@ check('operator button pressed after switching back',
 
 /* The model layer against a stubbed endpoint. These cover the split between
    a model that answers with nothing and a machine that never answered,
-   which are different problems and used to produce the same message. */
+   which are different problems and deserve different messages. */
 const samplePayload = {
   series: { stamp: stamps, value: values, trend: trend, expected: expected, lo: lo, hi: hi },
   events: { id: ['ev1'], type: ['spike'], start: [31], end: [31], peak: [31],
             peak_score: [3.2], mean_score: [3.2], len: [1], direction: ['above'],
             weight: [11.2], title: ['Spike'], when: ['Jun 02, 06:00'] },
-  meta: { cadence: 'hourly', source: 'test', method: 'robust',
+  meta: { cadence: 'hourly', source: 'test', method: 'resistant',
           method_label: 'Resistant seasonal', sens: 4.5, n: 60, summary: 'A test run.' }
 };
 
@@ -200,6 +202,85 @@ const settle = () => new Promise(function (r) { setTimeout(r, 10); });
   await settle();
   check('an http error is treated as unreachable rather than an empty answer',
     document.getElementById('triage-body').textContent.indexOf('could not be reached') >= 0);
+
+  /* A hostile or misconfigured endpoint can report any model name. The
+     name reaches the page in the model picker and as the speaker label in
+     chat, and both must stay text. The chat check runs synchronously,
+     while the Thinking placeholder is on screen and before any answer
+     replaces it. */
+  const hostile = '<img src=x data-pwned="1">';
+  const quoted = 'llama" data-quoted="1';
+  const tagsImpl = function (url) {
+    const body = url.endsWith('/api/tags')
+      ? { models: [{ name: hostile }, { name: quoted }] } : { response: 'fine' };
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve(body); } });
+  };
+  window.fetch = tagsImpl; global.fetch = tagsImpl;
+  window.NcModel.checkConnection();
+  await settle();
+  const pick = document.getElementById('model-pick');
+  check('model names land in the picker as text',
+    pick.options.length === 2 && pick.querySelector('img') === null &&
+    pick.options[0].value === hostile);
+  check('a quote in a model name cannot add an attribute to its option',
+    pick.querySelector('[data-quoted]') === null && pick.options[1].value === quoted);
+  document.getElementById('chat-input').value = 'which event matters most?';
+  window.NcModel.ask();
+  check('the chat speaker label stays text while the model is thinking',
+    document.querySelector('#chat-log img') === null &&
+    document.getElementById('chat-log').textContent.indexOf(hostile) >= 0);
+
+  /* The model reasons from the multiple the cards show, not the raw score,
+     which for spikes and dips is measured against the threshold instead. */
+  let sentPrompt = '';
+  const captureImpl = function (url, opts) {
+    if (opts && opts.body) sentPrompt = JSON.parse(opts.body).prompt;
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ response: 'ok' }); } });
+  };
+  window.fetch = captureImpl; global.fetch = captureImpl;
+  window.NcModel.setPayload({ series: samplePayload.series, meta: samplePayload.meta,
+    events: { id: ['ev1'], type: ['spike'], peak: [31], peak_score: [3.9], wobble: [17.7],
+              len: [1], direction: ['above'], title: ['Spike'], when: ['Jun 02, 06:00'] } });
+  window.NcModel.triage();
+  await settle();
+  check('the model is given the multiple shown on the card',
+    sentPrompt.indexOf('17.7 times the usual variation') >= 0 && sentPrompt.indexOf('3.9') < 0);
+
+  /* Notes are slow, one call per event, and new data rebuilds the cards with
+     the same ids. A note about the old run must not land on the new card. */
+  const held = [];
+  const slowImpl = function (url, opts) {
+    return new Promise(function (resolve) { held.push(function () {
+      const ev = JSON.parse(opts.body).prompt.match(/Event: (\w+)/)[1];
+      resolve({ ok: true, json: function () { return Promise.resolve({ response: 'note about ' + ev }); } });
+    }); });
+  };
+  window.fetch = slowImpl; global.fetch = slowImpl;
+  document.body.insertAdjacentHTML('beforeend', '<div id="note-ev2" style="display:none"></div>');
+  const runOf = function (types) { return { series: samplePayload.series, meta: samplePayload.meta,
+    events: { id: ['ev1', 'ev2'], type: types, peak: [10, 20], peak_score: [2, 2], wobble: [9, 9],
+              len: [1, 1], direction: ['above', 'below'], title: types, when: ['a', 'b'] } }; };
+  window.NcModel.setPayload(runOf(['Spike', 'Spike']));
+  window.NcModel.annotate();
+  held.shift()(); await settle();
+  window.NcModel.setPayload(runOf(['Dip', 'Dip']));
+  document.getElementById('note-ev2').textContent = '';
+  if (held.length) { held.shift()(); await settle(); }
+  check('a note about an earlier run does not land on a rebuilt card',
+    document.getElementById('note-ev2').textContent.indexOf('Spike') < 0);
+  check('a summary comes down when the data it described is replaced',
+    document.getElementById('triage-card').style.display === 'none');
+
+  /* A render failure reports itself as text, since an error message can
+     quote whatever value tripped it. */
+  window.NcChart.setPayload({ series: { stamp: { toString: function () {
+    throw new Error('<b data-err="1">bad stamp</b>'); } }, value: [1] }, events: {} });
+  const quiet = console.error; console.error = function () {};
+  window.NcChart.render();
+  console.error = quiet;
+  check('a chart failure is reported as text in place of the chart',
+    document.querySelector('#chart-host [data-err]') === null &&
+    document.getElementById('chart-host').textContent.indexOf('could not be rendered') >= 0);
 
   console.log('\n' + ok + ' passed, ' + bad + ' failed');
   process.exit(bad > 0 ? 1 : 0);

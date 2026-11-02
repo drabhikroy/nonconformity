@@ -4,12 +4,10 @@
    audit in tests/test_contrast.R parses the blocks below, so any token
    change is checked against WCAG 2.2 at 4.5 to 1 before delivery.
 
-   The palette blocks are deliberately complete. An earlier version left
-   the accent and two event colors untouched between palettes, so a switch
-   changed nothing a viewer was likely to be looking at and read as a dead
-   control. Each palette below now moves the accent, the focus ring, the
-   band, and all four event colors, so switching is unmistakable while each
-   palette stays separable for its kind of color vision. */
+   The palette blocks are deliberately complete. Each one moves the accent,
+   the focus ring, the band, and all four event colors, because a palette
+   that left any of them alone would change nothing a viewer was likely to
+   be looking at and read as a dead control. */
 
 /* Light theme, standard palette. Event colors are darkened variants of the
    Okabe and Ito set so they hold 4.5 to 1 as text on white cards. */

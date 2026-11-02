@@ -64,7 +64,7 @@ A typical workflow:
 2. Choose a detection method.
 3. Review flagged events on the chart.
 4. Read the explanation for each event.
-5. Export or reproduce the analysis when needed.
+5. Reproduce the analysis from the Researcher view when needed.
 
 The app keeps the detection method, event details, and explanations
 connected so users can understand why a point was flagged.
@@ -73,7 +73,8 @@ connected so users can understand why a point was flagged.
 
 Nonconformity uses a CSV with two columns:
 
-- A timestamp column containing dates or datetimes
+- A timestamp column containing ISO dates or datetimes, such as
+  `2026-01-31` or `2026-01-31T14:00:00Z`
 - A numeric value column containing the measurement
 
 Timestamp columns may use names such as:
@@ -94,8 +95,10 @@ Value columns may use names such as:
 - `amount`
 - `measure`
 
-Data should have at least 10 readings. Longer series covering several
-cycles generally produce better results.
+Data should have at least 10 readings with distinct timestamps. If a
+timestamp repeats, the first reading is kept and the app says how many
+rows were left out. Longer series covering several cycles generally
+produce better results.
 
 A template is available under the upload box.
 
@@ -163,12 +166,14 @@ falls back to the resistant seasonal method when one is not available.
 
 ### Understanding flagged events
 
-Each event includes:
+Each event card includes:
 
-- The observed change
-- The detection method used
-- The underlying score
+- The observed and expected values
+- The size of the departure in multiples of the usual variation
 - A plain-language explanation
+
+The Researcher view adds the detection method, the raw score for each
+event, and the exact call that reproduces the run.
 
 The app exposes the analysis details so users can understand how events
 were identified rather than receiving only a final flag.
@@ -177,7 +182,13 @@ were identified rather than receiving only a final flag.
 
 ### Tests and standards gates
 
-Run the full test suite:
+The browser tests need jsdom. Install it once from the repository root:
+
+```bash
+npm install --no-save jsdom
+```
+
+Then run the full test suite:
 
 ```bash
 sh nonconformity/tests/run_all.sh
@@ -185,9 +196,10 @@ sh nonconformity/tests/run_all.sh
 
 The test suite checks:
 
-- Detection methods against known sample events
+- Detection methods against known sample events and pure noise
+- Server behavior, including how unusual settings and uploads are handled
 - Contrast and accessibility settings
-- Generated writing
+- Writing standards in code and documentation
 - Browser rendering with jsdom
 - Application startup
 

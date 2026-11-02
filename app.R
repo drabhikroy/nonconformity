@@ -1,4 +1,4 @@
-# Nonconformity 0.2.0
+# Nonconformity 0.2.1
 # Find where operational data breaks its own pattern.
 #
 # An open source time series review app for two audiences. An operator sees
@@ -23,14 +23,12 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 
-app_name <- "Causality"
-app_version <- "0.2.0"
+app_name <- "Nonconformity"
+app_version <- "0.2.1"
 
-# ---------------------------------------------------------------------------
-# Cadence inference.
+# Cadence inference ----
 # The median gap between stamps decides the cadence, and the cadence decides
 # the seasonal cycle worth testing: hours repeat daily, days repeat weekly.
-# ---------------------------------------------------------------------------
 
 infer_cadence <- function(stamps) {
   gaps <- as.numeric(diff(stamps), units = "secs")
@@ -51,12 +49,10 @@ infer_cadence <- function(stamps) {
   list(label = hit$label[1], period = hit$period[1], step = med)
 }
 
-# ---------------------------------------------------------------------------
-# Decomposition.
+# Decomposition ----
 # A running median gives the trend because medians shrug off the very
 # outliers the app is hunting, unlike a mean smoother that bends toward
 # them. Seasonal terms are per position medians of the detrended values.
-# ---------------------------------------------------------------------------
 
 decompose_series <- function(value, periods) {
   n <- length(value)
@@ -69,11 +65,18 @@ decompose_series <- function(value, periods) {
   # also runs four cycles wide when the data allows, since a running
   # median absorbs any excursion longer than half its window, and an
   # absorbed excursion is an event the app fails to show.
+  # With no usable cycle the same reasoning sets the width from the length
+  # of the series. A seven reading window would chase the noise itself,
+  # shrinking the measured wobble and swallowing any run of a few readings.
   cap <- max(7L, floor(n / 3))
-  k <- 4L * base_p + 1L
-  if (k > cap) k <- 2L * base_p + 1L
-  if (k > cap) k <- base_p + 1L
-  if (k > cap) k <- cap
+  if (base_p == 0L) {
+    k <- min(max(25L, n %/% 20L), cap)
+  } else {
+    k <- 4L * base_p + 1L
+    if (k > cap) k <- 2L * base_p + 1L
+    if (k > cap) k <- base_p + 1L
+    if (k > cap) k <- cap
+  }
   k <- max(7L, k)
   if (k %% 2L == 0L) k <- k + 1L
   trend <- as.numeric(stats::runmed(value, k, endrule = "median"))
@@ -98,13 +101,11 @@ decompose_series <- function(value, periods) {
   list(trend = trend, seasonal = seasonal, remainder = remainder)
 }
 
-# ---------------------------------------------------------------------------
-# Point events.
+# Point events ----
 # Remainders are scaled by their median absolute deviation, so the
 # sensitivity slider reads as multiples of the usual wobble. Consecutive
 # flagged rows merge into one event: short bursts are spikes or dips, and
 # longer stretches count as sustained runs.
-# ---------------------------------------------------------------------------
 
 find_point_events <- function(score, min_run = 3L) {
   # An empty result still carries the full column set, so callers that add
@@ -140,13 +141,11 @@ find_point_events <- function(score, min_run = 3L) {
     )
 }
 
-# ---------------------------------------------------------------------------
-# Level shifts.
+# Level shifts ----
 # Binary segmentation on the deseasonalized series. Each candidate split is
 # the one that cuts the squared error the most, and it is kept only when
 # the gain clears a penalty scaled to the noise level, so the slider moves
 # in honest units rather than magic numbers.
-# ---------------------------------------------------------------------------
 
 find_shifts <- function(x, scale, penalty, min_len) {
   # Each accepted cut splits a segment in two, so the depth cap bounds the
@@ -154,17 +153,20 @@ find_shifts <- function(x, scale, penalty, min_len) {
   # splits far past the point where any of them describe the series.
   max_depth <- 8L
   out <- integer(0)
-  seg_sse <- function(v) sum((v - mean(v))^2)
   recurse <- function(lo, hi, depth) {
     n <- hi - lo + 1L
     if (n < 2L * min_len || depth > max_depth) return(invisible(NULL))
-    v <- x[lo:hi]
-    total <- seg_sse(v)
     cuts <- seq.int(min_len, n - min_len)
     if (length(cuts) == 0) return(invisible(NULL))
-    gains <- vapply(cuts, function(t) {
-      total - seg_sse(v[1:t]) - seg_sse(v[(t + 1):n])
-    }, numeric(1))
+    # Running sums score every split in one pass instead of a pass per
+    # split, which grows with the square of the length. Centering first
+    # keeps large sums from losing precision on values in the billions.
+    v <- x[lo:hi] - mean(x[lo:hi])
+    s1 <- cumsum(v); s2 <- cumsum(v^2)
+    left <- s2[cuts] - s1[cuts]^2 / cuts
+    right <- (s2[n] - s2[cuts]) - (s1[n] - s1[cuts])^2 / (n - cuts)
+    total <- s2[n] - s1[n]^2 / n
+    gains <- total - left - right
     best <- which.max(gains)
     threshold <- penalty * scale^2 * log(length(x))
     if (gains[best] > threshold) {
@@ -179,19 +181,11 @@ find_shifts <- function(x, scale, penalty, min_len) {
   sort(out)
 }
 
-# ---------------------------------------------------------------------------
-# Full analysis.
-# Everything the client needs comes back as one list: the decorated series,
-# the event table, and a meta block for the summary line.
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Shared expected line.
+# Shared expected line ----
 # Every method rests on the same decomposition so their outputs are directly
 # comparable: a running median trend, stacked seasonal medians, and a resistant
 # scale from the remainder. Detectors receive this and disagree only about
 # what counts as a departure.
-# ---------------------------------------------------------------------------
 
 build_expected <- function(df, period_choice = "auto") {
   cad <- infer_cadence(df$stamp)
@@ -221,32 +215,20 @@ build_expected <- function(df, period_choice = "auto") {
        period = if (length(periods)) periods[1] else 0L)
 }
 
-# ---------------------------------------------------------------------------
-# Detector contract.
-#
-# Every method is a function of (df, ex, sens, penalty) returning a list of:
-#
-#   events    a data frame in the shared event schema, possibly with no rows
-#   expected  the fitted level at every reading
-#   lo, hi    the band the method judged against, one value per reading
-#   scale     a single representative width, for the researcher panel
-#
-# Two of the three methods ignore penalty, since only segmentation reads it.
-# They take it anyway so the dispatcher can call any detector the same way,
-# and so the registry stays the only place that knows which is which.
-#
-# lo and hi are per reading rather than a single width on purpose. A method
-# whose threshold moves from reading to reading would otherwise show marks
-# sitting inside its own expected range, which reads as a contradiction.
-# ---------------------------------------------------------------------------
+# Detector contract ----
+# Every method takes (df, ex, sens, penalty) and returns a list of events
+# (the shared schema, possibly empty), expected (fitted level per reading),
+# lo and hi (the band it judged against, per reading), and scale (one
+# representative width for the researcher panel). Methods that ignore
+# penalty still accept it so the dispatcher can call them all alike. The
+# band is per reading because a threshold that moves would otherwise leave
+# marks sitting inside their own expected range.
 
-# ---------------------------------------------------------------------------
-# Method: resistant seasonal.
+# Method: resistant seasonal ----
 # The flagship detector. Medians resist the very outliers it hunts, binary
 # segmentation finds level shifts, and per segment offsets fold into the
 # expected line so a step never sprays false spikes after it. This is the
 # default an operator sees.
-# ---------------------------------------------------------------------------
 
 detect_resistant <- function(df, ex, sens, penalty) {
   parts <- ex$parts; n <- ex$n; scale <- ex$scale; periods <- ex$periods
@@ -256,12 +238,12 @@ detect_resistant <- function(df, ex, sens, penalty) {
   fitted <- periods[4L * periods <= n]
   min_len <- max(5L, if (length(fitted)) max(fitted) else 0L)
 
-  # Segmentation assumes level plus noise, so a steady drift would read as
-  # a staircase of false steps. A lag difference median gives a slope that
-  # a genuine step cannot fool, because only a small share of the pairs
-  # straddle any one step.
-  h <- max(min_len, floor(n / 6))
-  slope <- if (n > 3L * h && h >= 1L) median(diff(deseason, lag = h)) / h else 0
+  # Segmentation assumes level plus noise, so drift is removed first. A lag
+  # difference median gives a slope a genuine step cannot fool, since few
+  # pairs straddle any one step. The lag shrinks on short series rather
+  # than the estimate switching off, or a plain line looks like a step.
+  h <- min(max(min_len, floor(n / 6)), floor(n / 3))
+  slope <- if (h >= 1L) median(diff(deseason, lag = h)) / h else 0
   # Winsorizing against a rolling median keeps single outliers from buying
   # cuts with their squared error, while a genuine step passes through
   # untouched because the rolling median follows it within half a window.
@@ -348,24 +330,22 @@ detect_resistant <- function(df, ex, sens, penalty) {
        lo = expected - sens * scale2, hi = expected + sens * scale2)
 }
 
-# ---------------------------------------------------------------------------
-# Method: rolling z-score.
-# A textbook operator method. The expected level is a trailing mean and the
-# spread a trailing standard deviation, so it reacts fast to sudden spikes
-# and makes no seasonal assumption. It ignores level shifts by design, which
-# is exactly why offering it beside the resistant method is instructive.
-# ---------------------------------------------------------------------------
+# Method: rolling z-score ----
+# A familiar operator method, made resistant: the expected level is a
+# trailing median and the spread a trailing median absolute deviation. It
+# reacts fast to sudden spikes and makes no seasonal assumption, so on
+# rhythmic data it sees little, which is the contrast it is offered for.
 
 detect_rolling_z <- function(df, ex, sens, penalty) {
   n <- ex$n
-  w <- max(12L, min(ex$period * 2L, floor(n / 4)))
-  if (w < 5L) w <- 5L
+  # Sixty readings is the window floor. A spread from a dozen points swings
+  # so much that pure noise crosses the default threshold about once in a
+  # hundred readings. Short files fall back to a quarter of their length.
+  w <- max(60L, 2L * ex$period)
+  w <- max(5L, min(w, floor(n / 4)))
   center <- numeric(n); spread <- numeric(n)
-  # A trailing window only, because an operator watching a live feed cannot
-  # borrow from the future. The center is a trailing median and the spread a
-  # trailing median absolute deviation, so the point under test cannot
-  # inflate its own baseline the way a mean and standard deviation would and
-  # then hide the very spike that should trip the alarm.
+  # Trailing only, since a live feed cannot borrow from the future, and
+  # resistant, so a spike cannot inflate its own baseline and hide itself.
   for (i in seq_len(n)) {
     lo <- max(1L, i - w)
     seg <- df$value[lo:max(lo, i - 1L)]
@@ -393,13 +373,12 @@ detect_rolling_z <- function(df, ex, sens, penalty) {
        expected = center, scale = median(spread), lo = lo, hi = hi)
 }
 
-# ---------------------------------------------------------------------------
-# Method: STL remainder.
-# Seasonal and trend decomposition by loess, from base R stats::stl. The
-# remainder is tagged where it leaves an interquartile fence, the approach
-# popularized for operational data by the anomalize package. It needs a
-# defined cycle, so it falls back to the resistant method when none applies.
-# ---------------------------------------------------------------------------
+# Method: STL remainder ----
+# Seasonal and trend decomposition by loess, from base R stats::stl, the
+# approach popularized for operational data by the anomalize package. The
+# remainder is judged against a spread taken from its interquartile range.
+# It needs a defined cycle, so it falls back to the resistant method when
+# none applies.
 
 detect_stl <- function(df, ex, sens, penalty) {
   p <- ex$period
@@ -410,24 +389,22 @@ detect_stl <- function(df, ex, sens, penalty) {
   if (is.null(fit)) return(detect_resistant(df, ex, sens, penalty))
   comps <- as.data.frame(fit$time.series)
   remainder <- comps$remainder
-  # An interquartile fence widened by the sensitivity slider, which is the
-  # classic STL rule rather than a standard deviation gate. quantile keeps
-  # its percentile names, and an unnamed width is what the caller expects.
+  # The interquartile range resists outliers, and dividing by 1.349 puts it
+  # on the standard deviation scale the other methods use, so the slider
+  # means the same thing for all of them.
   qs <- unname(stats::quantile(remainder, c(0.25, 0.75)))
-  half_iqr <- (qs[2] - qs[1]) / 2
-  if (!is.finite(half_iqr) || half_iqr == 0) half_iqr <- ex$scale
-  points <- find_point_events(remainder / (half_iqr * sens))
+  wobble <- (qs[2] - qs[1]) / 1.349
+  if (!is.finite(wobble) || wobble == 0) wobble <- ex$scale
+  points <- find_point_events(remainder / (wobble * sens))
   expected <- comps$trend + comps$seasonal
   list(events = points %>% mutate(before_level = NA_real_, after_level = NA_real_),
-       expected = expected, scale = half_iqr,
-       lo = expected - sens * half_iqr, hi = expected + sens * half_iqr)
+       expected = expected, scale = wobble,
+       lo = expected - sens * wobble, hi = expected + sens * wobble)
 }
 
-# ---------------------------------------------------------------------------
-# Method registry.
+# Method registry ----
 # One place names every method, its audience, and the function that runs it,
 # so the UI and the dispatcher never drift apart.
-# ---------------------------------------------------------------------------
 
 method_registry <- tibble::tribble(
   ~key,        ~label,                ~audience,     ~fn,                 ~uses_penalty,
@@ -443,12 +420,10 @@ penalty_condition <- paste(
   sprintf("input.method == '%s'", method_registry$key[method_registry$uses_penalty]),
   collapse = " || ")
 
-# ---------------------------------------------------------------------------
-# Full analysis.
+# Full analysis ----
 # The dispatcher builds the shared expected line, runs the chosen detector,
 # then decorates and ranks its events into the one schema every downstream
 # piece reads.
-# ---------------------------------------------------------------------------
 
 analyze_series <- function(df, sens = 4.5, penalty = 10, period_choice = "auto",
                            method = "resistant") {
@@ -506,12 +481,10 @@ analyze_series <- function(df, sens = 4.5, penalty = 10, period_choice = "auto",
   )
 }
 
-# ---------------------------------------------------------------------------
-# Reading engine.
+# Reading engine ----
 # Deterministic prose built from the numbers alone, so the app reads the
 # same with or without a local model. The model, when present, only adds a
 # labeled note under this text.
-# ---------------------------------------------------------------------------
 
 fmt_stamp <- function(x, cadence) {
   if (cadence %in% c("minute", "hourly")) format(x, "%b %d, %H:%M")
@@ -520,8 +493,32 @@ fmt_stamp <- function(x, cadence) {
 
 fmt_num <- function(x) {
   if (!is.finite(x)) return("?")
-  if (abs(x) >= 1000) formatC(x, format = "d", big.mark = ",")
+  # Format "f" with no decimals rather than "d", which casts to a 32 bit
+  # integer and turns byte counts or amounts in cents past 2.1 billion into
+  # NA. Past a trillion, digit groups stop being readable and scientific
+  # notation says more.
+  if (abs(x) >= 1e12) formatC(x, format = "g", digits = 4)
+  else if (abs(x) >= 1000) formatC(x, format = "f", digits = 0, big.mark = ",")
   else formatC(x, format = "g", digits = 4)
+}
+
+# Multiples of the usual wobble keep one decimal while they are small
+# enough to read, and switch to the same number style as everything else
+# once a reading is so extreme that a decimal adds nothing.
+fmt_mult <- function(x) {
+  if (!is.finite(x)) return("?")
+  if (x >= 1000) fmt_num(x) else sprintf("%.1f", x)
+}
+
+# The summary sentence opens with a noun phrase whose first word changes
+# with the data, so the article has to follow it: an hourly series, a daily
+# series, an unknown cadence.
+with_article <- function(word) {
+  paste(if (grepl("^[aeiou]|^hour", word, ignore.case = TRUE)) "an" else "a", word)
+}
+
+plural <- function(n, one, many = paste0(one, "s")) {
+  sprintf("%s %s", formatC(n, big.mark = ","), if (n == 1) one else many)
 }
 
 event_title <- function(type, direction) {
@@ -542,25 +539,25 @@ event_prose <- function(ev, series, meta) {
     dir_word <- if (ev$type == "spike") "above" else "below"
     sprintf(
       paste0("At %s the value reached %s while the expected level was near %s, ",
-             "about %.1f times the usual wobble %s it. Single point departures ",
+             "about %s times the usual wobble %s it. Single point departures ",
              "like this often trace back to one discrete cause."),
-      at, fmt_num(obs), fmt_num(exp), mult, dir_word)
+      at, fmt_num(obs), fmt_num(exp), fmt_mult(mult), dir_word)
   } else if (ev$type == "run") {
     from <- fmt_stamp(series$stamp[ev$start], meta$cadence)
     to <- fmt_stamp(series$stamp[ev$end], meta$cadence)
     sprintf(
       paste0("From %s to %s the series stayed %s its expected range for %d ",
-             "readings in a row, peaking at about %.1f times the usual wobble. ",
+             "readings in a row, peaking at about %s times the usual wobble. ",
              "A stretch this long points to a condition that persisted rather ",
              "than a one off blip."),
-      from, to, ev$direction, ev$len, mult)
+      from, to, ev$direction, ev$len, fmt_mult(mult))
   } else {
     sprintf(
       paste0("Around %s the typical level moved from about %s to about %s and ",
-             "stayed there. The change equals %.1f times the usual wobble, and ",
+             "stayed there. The change equals %s times the usual wobble, and ",
              "a step that holds usually means something structural changed, such ",
              "as a deploy, a price change, or a policy taking effect."),
-      at, fmt_num(ev$before_level), fmt_num(ev$after_level), mult)
+      at, fmt_num(ev$before_level), fmt_num(ev$after_level), fmt_mult(mult))
   }
 }
 
@@ -574,9 +571,9 @@ overall_prose <- function(res) {
   } else ""
   if (is.null(ev) || nrow(ev) == 0) {
     return(sprintf(
-      paste0("This is a %s series of %s readings from %s. Nothing crossed the ",
+      paste0("This is %s series of %s from %s. Nothing crossed the ",
              "current sensitivity line.%s Lower the sensitivity to look closer."),
-      m$cadence, formatC(m$n, big.mark = ","), span, season_bit))
+      with_article(m$cadence), plural(m$n, "reading"), span, season_bit))
   }
   counts <- ev %>% count(type)
   label_for <- c(spike = "spike", dip = "dip", run = "sustained stretch", shift = "level shift")
@@ -587,17 +584,15 @@ overall_prose <- function(res) {
   listing <- if (length(bits) == 1) bits else
     paste(paste(bits[-length(bits)], collapse = ", "), "and", bits[length(bits)])
   sprintf(
-    paste0("This is a %s series of %s readings from %s.%s The current settings ",
+    paste0("This is %s series of %s from %s.%s The current settings ",
            "surface %s. Cards below rank them by weight, and each marker on the ",
            "chart matches one card."),
-    m$cadence, formatC(m$n, big.mark = ","), span, season_bit, listing)
+    with_article(m$cadence), plural(m$n, "reading"), span, season_bit, listing)
 }
 
-# ---------------------------------------------------------------------------
-# Sample data.
+# Sample data ----
 # Three worked datasets with story beats planted at known places, so the
 # walkthrough can point at real events and the tests can assert on them.
-# ---------------------------------------------------------------------------
 
 sample_server_load <- function() {
   hours <- seq(ymd_h("2026-05-04 00"), by = "hour", length.out = 24 * 42)
@@ -650,11 +645,9 @@ sample_sensor <- function() {
   tibble(stamp = stamps, value = round(value, 2))
 }
 
-# ---------------------------------------------------------------------------
-# Upload parsing.
+# Upload parsing ----
 # The reader accepts a stamp column and a value column under several common
 # names, and reports a plain reason when the shape does not fit.
-# ---------------------------------------------------------------------------
 
 parse_upload <- function(path) {
   raw <- tryCatch(read_csv(path, show_col_types = FALSE),
@@ -685,12 +678,24 @@ parse_upload <- function(path) {
   if (nrow(df) < 10) {
     return(list(ok = FALSE, why = "Fewer than ten rows had both a readable timestamp and a numeric value."))
   }
-  list(ok = TRUE, df = df)
+  # Repeated timestamps keep their first reading. Dropping rows quietly
+  # could halve a file without anyone noticing, so the person is told how
+  # many went, and the ten reading floor applies to what remains.
+  n_before <- nrow(df)
+  df <- df %>% distinct(stamp, .keep_all = TRUE)
+  dropped <- n_before - nrow(df)
+  if (nrow(df) < 10) {
+    return(list(ok = FALSE, why = sprintf(
+      "Only %d distinct timestamps were found. Each reading needs its own timestamp, and at least ten are needed.",
+      nrow(df))))
+  }
+  note <- if (dropped > 0) sprintf(
+    "%s shared a timestamp with an earlier row and %s left out. The first reading at each timestamp was kept.",
+    plural(dropped, "row"), if (dropped == 1) "was" else "were") else NULL
+  list(ok = TRUE, df = df, note = note)
 }
 
-# ---------------------------------------------------------------------------
-# UI
-# ---------------------------------------------------------------------------
+# UI ----
 
 marker_glyph <- function(type, size = 16) {
   # Small inline SVG glyphs mirror the chart markers so the legend, the
@@ -803,7 +808,7 @@ ui <- fluidPage(
                         "Yearly cycle for monthly data" = "year"))
         )
       ),
-      # The local model card grows into a small assistant. Beyond the per
+      # The local model card holds more than per event notes. Beyond the per
       # card notes it can triage the whole run and answer questions about
       # the loaded series in a chat, all on the same machine.
       div(class = "panel-card",
@@ -898,9 +903,7 @@ ui <- fluidPage(
   )
 )
 
-# ---------------------------------------------------------------------------
-# Server
-# ---------------------------------------------------------------------------
+# Server ----
 
 server <- function(input, output, session) {
   `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
@@ -927,6 +930,7 @@ server <- function(input, output, session) {
       return(invisible(NULL))
     }
     dataset(parsed$df); source_name(input$upload$name)
+    if (!is.null(parsed$note)) showNotification(parsed$note, type = "warning", duration = 12)
   })
 
   # The method list is filtered by persona: an operator sees the two plain
@@ -943,14 +947,19 @@ server <- function(input, output, session) {
   result <- reactive({
     df <- dataset()
     if (is.null(df)) return(NULL)
-    # An error inside a reactive takes the whole session down with it, which
-    # presents to the person as the app dying with no explanation. Catching
-    # it here keeps the rest of the app alive and says what went wrong.
+    # An error in a reactive ends the session, which looks like the app
+    # dying, so it is caught and reported instead. Settings are held to the
+    # slider ranges because the socket can carry values the sliders cannot,
+    # and a negative sensitivity turns the expected range inside out.
+    clamp <- function(x, lo, hi, fallback) {
+      x <- suppressWarnings(as.numeric(x))
+      if (length(x) != 1 || !is.finite(x)) fallback else min(max(x, lo), hi)
+    }
     tryCatch(
       analyze_series(df,
-        sens = input$sens,
-        penalty = input$penalty,
-        period_choice = input$period_choice,
+        sens = clamp(input$sens, 2, 6, 4.5),
+        penalty = clamp(input$penalty, 2, 30, 10),
+        period_choice = input$period_choice %||% "auto",
         method = input$method %||% "resistant"),
       error = function(e) {
         showNotification(
@@ -973,7 +982,11 @@ server <- function(input, output, session) {
         res$events %>%
           mutate(
             title = map2_chr(type, direction, event_title),
-            when = fmt_stamp(res$series$stamp[peak], res$meta$cadence)
+            when = fmt_stamp(res$series$stamp[peak], res$meta$cadence),
+            # The same multiple the cards show, so the model reasons from
+            # the numbers on screen and not from threshold units.
+            wobble = if_else(type == "shift", abs(peak_score),
+                             abs(peak_score) * res$meta$sens)
           )
       } else list(),
       meta = list(
@@ -1000,6 +1013,11 @@ server <- function(input, output, session) {
 
   output$reading_cards <- renderUI({
     res <- result()
+    # Before any data arrives there is nothing to judge, and "no events"
+    # would suggest an analysis had run and come up empty.
+    if (is.null(dataset())) {
+      return(p(class = "hint", "Events will be listed here once data is loaded."))
+    }
     if (is.null(res) || nrow(res$events) == 0) {
       return(p(class = "hint", "No events under the current settings."))
     }
@@ -1017,7 +1035,7 @@ server <- function(input, output, session) {
         ),
         div(class = "event-text", event_prose(e, res$series, res$meta)),
         div(class = "chip-row",
-          span(class = "stat-chip", sprintf("%.1fx usual wobble", unit_mult)),
+          span(class = "stat-chip", sprintf("%sx usual wobble", fmt_mult(unit_mult))),
           if (e$type == "run") span(class = "stat-chip", sprintf("%d readings", e$len)),
           if (e$type == "shift") span(class = "stat-chip",
             sprintf("%s to %s", fmt_num(e$before_level), fmt_num(e$after_level))),
