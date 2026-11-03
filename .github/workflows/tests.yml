@@ -1,0 +1,116 @@
+# Runs every suite on every push and pull request, so a change that
+# breaks the graph math, the renderer, the appearance toggle, the color
+# palettes, or the house writing standard is caught before it reaches a
+# release rather than after a reader finds it.
+#
+# The two cheap gates run first. Both finish in under a second and both
+# fail on things a reviewer should never have to spend attention
+# catching by eye, so there is no reason to make a contributor wait for
+# an R toolchain before hearing about a banned word or a color that
+# misses its contrast floor.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Nothing in this workflow writes back to the repository, so it is given
+# no write access to it.
+permissions:
+  contents: read
+
+# Every action is pinned to a full commit rather than a tag. A tag can be
+# moved to different code after the fact, and an action runs with this
+# repository's token, so a moved tag is a way into the repository. The
+# version comment beside each pin is what Dependabot reads and updates.
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: House writing standard
+        run: node tests/standards_test.mjs
+
+      - name: Color palettes against WCAG 2.2 AA
+        run: node tests/palette_test.mjs
+
+      # The force layout is checked for correctness and then measured.
+      # The measurement is not a pass or fail on its own, since a runner
+      # is slower than a laptop, but the shape of the growth is: Barnes
+      # and Hut has to cost close to linearly, and a change that broke
+      # the quadtree would show here as quadratic growth long before it
+      # showed as a map that felt heavy.
+      - name: Force layout, correctness and cost
+        run: node tests/layout_test.mjs
+
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          r-version: release
+
+      # The curl package is optional for a reader, since only the managed
+      # model download uses it, but the R suite replaces its fetch function
+      # to test an interrupted download, so the suite needs it installed.
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          packages: |
+            any::shiny
+            any::bslib
+            any::igraph
+            any::tidygraph
+            any::ggraph
+            any::ggplot2
+            any::dplyr
+            any::tidyr
+            any::purrr
+            any::tibble
+            any::readr
+            any::jsonlite
+            any::curl
+
+      - name: Graph math, prose, contrast, and research tier
+        run: Rscript tests/run_tests.R
+
+      - name: Install the browser test harness
+        # Pinned to the version the suite was last verified against, so a
+        # new jsdom release cannot change results without a change here.
+        run: npm install jsdom@24.1.3
+
+      - name: Map renderer under a simulated browser
+        run: node tests/dom_test.mjs
+
+      # The last two suites need the page the server actually sends
+      # rather than markup a test wrote for itself, so the app is
+      # started once and both read from it.
+      - name: Serve the app for the suites that need a real page
+        run: |
+          Rscript -e 'shiny::runApp(".", port = 7823, launch.browser = FALSE)' &
+          for i in $(seq 1 20); do
+            sleep 3
+            if curl -sf -o /dev/null http://127.0.0.1:7823/; then break; fi
+          done
+          curl -s http://127.0.0.1:7823/ -o /tmp/page.html
+          curl -s "http://127.0.0.1:7823/styles.css" -o /tmp/styles.css
+          curl -s "http://127.0.0.1:7823/graph.js" -o /tmp/graph.js
+          Rscript tests/render_controls.R /tmp/controls.html /tmp/toggle.html
+
+      - name: Appearance toggle against the served page
+        run: node tests/theme_test.mjs /tmp/page.html /tmp/styles.css /tmp/toggle.html
+
+      # This suite existed for three versions without ever being run.
+      # Full screen is the one control in the app that has broken in
+      # three separate releases, which makes an unrun suite for it the
+      # worst place in the repository to leave a gap.
+      - name: Full screen against the served page
+        run: |
+          node tests/fullscreen_test.mjs /tmp/page.html /tmp/graph.js \
+            /tmp/controls.html
+
+      - name: Release notes are ready for the current version
+        run: sh tests/release_notes_test.sh
